@@ -1,0 +1,2 @@
+# Support triage playbook
+Collect the affected flow, approximate timestamp, browser and non-sensitive reference ID. Do not request passwords, card numbers, access tokens or personal financial records. For potential duplicate charges, ask whether the bank shows pending authorizations or settled transactions. If no approved incident resolution exists, explain that engineering is investigating; do not invent a workaround or fix date.

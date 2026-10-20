@@ -1,0 +1,2 @@
+# Resolution proposals
+All contributors can read this collection. Publish only customer-safe proposed resolutions. Private engineering investigations stay in /engineering. A proposal is unapproved until a human reviewer promotes the reviewed content into /approved. Publishing can update an inbox document; it is not an immutable submission. Application review snapshots bind the source hash and reviewed text.

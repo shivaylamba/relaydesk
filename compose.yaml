@@ -1,0 +1,14 @@
+services:
+  relaydesk:
+    build: .
+    ports:
+      - "127.0.0.1:3410:3410"
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      RELAYDESK_OPERATOR_KEY: ${RELAYDESK_OPERATOR_KEY:?Set a strong operator key in .env before running Docker}
+    volumes:
+      - relaydesk-data:/app/.runtime
+    restart: unless-stopped
+volumes:
+  relaydesk-data:
