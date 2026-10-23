@@ -1,11 +1,12 @@
 import bolt from '@slack/bolt';
 import {randomUUID} from 'node:crypto';
 import {slackConfig as c,config,safeError} from './config.mjs';
-import {put,get,list,now,receipt,createTicket,changeTicket,audit} from './store.mjs';
+import {put,get,list,now,receipt,createTicket,changeTicket,audit,addTicketContext} from './store.mjs';
 import {startRun} from './agents.mjs';
 import {approveProposal,reviewDecision} from './review.mjs';
 import {requireReviewer,bodyOfProposal} from './review-policy.mjs';
 import {hash} from './lore.mjs';
+import {triageState,triageLabels} from './triage.mjs';
 export const slackStatus={configured:false,connected:false,deliveryEnabled:c.delivery,error:null};let app,working=false;
 const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 const job=(kind,data)=>put('slack-job',{id:randomUUID(),kind,data,status:'queued',createdAt:now()});
@@ -13,14 +14,22 @@ function binding(team,channel,role){return team===c.team&&channel===c[role];}
 function reviewer(team,user,channel){if(team!==c.team||(channel&&channel!==c.review))return false;try{requireReviewer('/approved','slack:'+user);return true;}catch{return false;}}
 export function queueMessage(channel,text,{ticketId,threadTs,blocks,purpose='reply'}={}){if(![c.support,c.engineering,c.review].includes(channel)||!channel)throw new Error('Slack destination is not configured.');return put('outbox',{id:randomUUID(),channel,text,threadTs,blocks,purpose,ticketId,status:c.delivery?'queued':'held',createdAt:now()});}
 const link=id=>'http://localhost:'+config.port+'/#ticket='+id;
-async function waitRun(id){for(let i=0;i<240;i++){const run=get('run',id);if(run.status==='failed')throw new Error(run.error);if(run.status==='completed')return run;await new Promise(r=>setTimeout(r,1000));}throw new Error('Agent is still running. Inspect RelayDesk before retrying.');}
-function actions(ticket){return[{type:'actions',elements:[{type:'button',action_id:'relay_escalate',text:{type:'plain_text',text:'Escalate to engineering'},value:ticket.id}]}];}
+async function waitRun(id){for(let i=0;i<1500;i++){const run=get('run',id);if(run.status==='failed')throw new Error(run.error);if(run.status==='completed')return run;await new Promise(r=>setTimeout(r,1000));}throw new Error('Agent is still running. Inspect RelayDesk before retrying.');}
+function actions(ticket){return[{type:'actions',elements:[{type:'button',action_id:'relay_triage',text:{type:'plain_text',text:'Request internal triage'},value:ticket.id}]}];}
 export async function prepareSupportReply(ticketId,question){const ticket=get('ticket',ticketId);if(!ticket.slack)throw new Error('This ticket has no Slack support thread.');const approved=list('proposal').find(p=>p.ticketId===ticketId&&p.status==='approved');const run=await waitRun(startRun(ticketId,'support',(question?'Customer follow-up from this support thread: '+question+'\n':'')+'Respond using the latest approved knowledge. Cite actual sources.').id);if(approved){const path=approved.approvedPath;if(!run.sources.includes(path)||!run.events.some(e=>e.type==='tool'&&e.status==='succeeded'&&e.command?.startsWith('cat ')&&e.command.includes(path)&&(!approved.approvedDocumentHash||hash(e.output||'')===approved.approvedDocumentHash)))throw new Error('Reply withheld: the fresh support run did not read the exact approved document revision.');}queueMessage(c.support,run.response,{ticketId,threadTs:ticket.slack.supportTs,purpose:'support-reply',blocks:[{type:'section',text:{type:'mrkdwn',text:esc(run.response).slice(0,2900)}},...actions(ticket)]});return run;}
 async function processJob(j){
  if(j.kind==='support'){
   const e=j.data;let ticket=list('ticket').find(t=>t.slack?.team===c.team&&t.slack.supportTs===(e.thread_ts||e.ts));
   if(!ticket)ticket=createTicket({title:e.text.replace(/<@[A-Z0-9]+>/g,'').trim().slice(0,120)||'Slack support request',description:e.text.replace(/<@[A-Z0-9]+>/g,'').trim().slice(0,6000),customer:'Slack member '+e.user,origin:'slack',slack:{team:c.team,supportChannel:c.support,supportTs:e.thread_ts||e.ts}});
+  if(e.thread_ts&&ticket.slack?.supportTs===e.thread_ts){const note=e.text.replace(/<@[A-Z0-9]+>/g,'').trim().slice(0,2000);if(note.length>=5)ticket=addTicketContext(ticket.id,note,'slack:'+e.user);}
   j.ticketId=ticket.id;put('slack-job',j);await prepareSupportReply(ticket.id,e.text.replace(/<@[A-Z0-9]+>/g,'').trim().slice(0,2000));
+ }else if(j.kind==='triage'){
+  const ticket=get('ticket',j.data.ticketId);
+  if(ticket.slack?.team!==c.team)throw new Error('Ticket is not bound to this workspace.');
+  const run=await waitRun(startRun(ticket.id,'engineering','Assess whether this issue needs code investigation before escalation. Read relevant knowledge and submit_triage.','triage').id);
+  const {assessment:a}=triageState(ticket.id);
+  if(!a||a.runId!==run.id)throw new Error('No completed triage assessment is available.');
+  queueMessage(c.engineering,esc(ticket.id+' · Internal triage: '+triageLabels[a.category]+'\n'+a.summary+'\nCode change: '+a.codeChange+' · Confidence: '+a.confidence+' (qualitative)\nReview evidence and choose the next step in RelayDesk: '+link(ticket.id)+'\nNo code run or Devin escalation has been started.'),{ticketId:ticket.id,purpose:'internal-triage'});
  }else if(j.kind==='escalate'||j.kind==='revise'){
   const ticket=get('ticket',j.data.ticketId);if(!ticket.slack||ticket.slack.team!==c.team)throw new Error('Ticket is not bound to this workspace.');
   queueMessage(c.engineering,(j.kind==='revise'?'Reviewer requested changes. Fresh engineering investigation for ':'Engineering investigation for ')+ticket.id+': '+ticket.title+'\nCustomer report: '+ticket.description,{ticketId:ticket.id,purpose:'engineering-handoff'});
@@ -49,7 +58,8 @@ export async function startSlack(){
   const auth=await app.client.auth.test();if(auth.team_id!==c.team)throw new Error('Slack bot token belongs to a different workspace.');
   for(const channel of [c.support,c.engineering,c.review]){const {channel:info}=await app.client.conversations.info({channel});if(info?.is_ext_shared)throw new Error('Slack Connect channels are outside this MVP.');if(!info?.is_member)throw new Error('Invite RelayDesk to every configured channel.');if([c.engineering,c.review].includes(channel)&&!info?.is_private)throw new Error('Engineering and review channels must be private.');}
   app.event('app_mention',async({event,body})=>{if(event.bot_id||event.subtype||!binding(body.team_id,event.channel,'support'))return;if(!receipt(c.team+':'+body.event_id))return;job('support',event);});
-  app.action('relay_escalate',async({ack,body,action})=>{await ack();if(!binding(body.team.id,body.channel?.id,'support'))return;const ticket=get('ticket',action.value);if(ticket.slack?.supportTs!==(body.message?.thread_ts||body.message?.ts)||ticket.slack?.team!==c.team)return;if(list('slack-job').some(j=>['queued','running'].includes(j.status)&&j.data?.ticketId===ticket.id))return;if(!receipt(c.team+':escalate:'+ticket.id+':'+body.action_ts))return;job('escalate',{ticketId:ticket.id});});
+  const requestTriage=async({ack,body,action})=>{await ack();if(!binding(body.team.id,body.channel?.id,'support'))return;const ticket=get('ticket',action.value);if(ticket.slack?.supportTs!==(body.message?.thread_ts||body.message?.ts)||ticket.slack?.team!==c.team)return;if(list('slack-job').some(j=>['queued','running'].includes(j.status)&&j.data?.ticketId===ticket.id))return;if(!receipt(c.team+':escalate:'+ticket.id+':'+body.action_ts))return;job('triage',{ticketId:ticket.id});};
+  app.action('relay_triage',requestTriage);app.action('relay_escalate',requestTriage);
   app.action('relay_review',async({ack,body,action,client})=>{await ack();if(!reviewer(body.team.id,body.user.id,body.channel?.id))return;const p=get('proposal',action.value);if(p.status!=='pending'){await client.chat.postEphemeral({channel:c.review,user:body.user.id,text:'This proposal is '+p.status+'. Open the latest pending revision; no approval was applied.'});return;}if(bodyOfProposal(p).length>3000){await client.chat.postEphemeral({channel:c.review,user:body.user.id,text:'This proposal is longer than Slack’s review editor. Review it in the local RelayDesk app: '+link(p.ticketId)});return;}
    const nonce=randomUUID();put('review-session',{id:nonce,user:body.user.id,team:body.team.id,proposalId:p.id,sourceHash:p.sourceHash,createdAt:now()});
    await client.views.open({trigger_id:body.trigger_id,view:{type:'modal',callback_id:'relay_review_decision',private_metadata:nonce,title:{type:'plain_text',text:'Review resolution'},submit:{type:'plain_text',text:'Submit decision'},close:{type:'plain_text',text:'Cancel'},blocks:[

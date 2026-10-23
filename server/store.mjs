@@ -17,3 +17,9 @@ export function seed(){if(list('ticket').length)return;for(const t of [
  {title:'Sign-in keeps sending me back to login',description:'After signing in successfully I land on the login screen again. This happens in my existing browser session.',customer:'Jonas Patel · Cedar demo',priority:'Medium'},
  {title:'Webhook arrived much later than expected',description:'Our order webhook was delayed after a retry. Is there an approved workaround or delivery-time guarantee?',customer:'Leah Brooks · Cedar demo',priority:'Medium'}])createTicket(t);}
 export function recoverInterrupted(){for(const r of list('run').filter(r=>r.status==='running'||r.status==='queued')){r.status='failed';r.error='The app restarted before this run finished. Start a fresh run; writes were not automatically replayed.';r.endedAt=now();put('run',r);}for(const j of list('slack-job').filter(j=>j.status==='running')){j.status='needs-review';j.error='Interrupted during processing. Inspect the ticket before retrying; no automatic model/write replay.';put('slack-job',j);}for(const o of list('outbox').filter(o=>o.status==='sending')){o.status='uncertain';o.error='Delivery was interrupted. Inspect Slack before requesting another delivery.';put('outbox',o);}}
+
+export function addTicketContext(id,note,actor='local-operator'){
+ const t=get('ticket',id),context=t.context||[];
+ if(context.length>=24||context.reduce((n,c)=>n+c.note.length,0)+note.length>12000)throw Object.assign(new Error('Ticket context limit reached. Create a follow-up ticket for further details.'),{status:400});
+ const value=changeTicket(id,{context:[...context,{id:randomUUID(),at:now(),actor,note}]});audit('ticket.context.added',{ticketId:id,actor});return value;
+}

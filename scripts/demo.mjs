@@ -7,7 +7,12 @@ async function api(path,body){const r=await fetch(base+'/api'+path,{headers,...(
 async function run(id,role){const r=await api('/tickets/'+id+'/runs',{role});console.log('Started real '+role+' run:',r.id);while(true){await new Promise(r=>setTimeout(r,1000));const data=await api('/runs/'+r.id);if(data.status==='failed')throw new Error(data.error);if(data.status==='completed'){console.log(data.response);console.log('Sources:',data.sources);return data;}}}
 const ui=readline.createInterface({input:stdin,output:stdout});
 try{const ticket=await api('/tickets',{title:'Checkout timeout followed by duplicate bank entries',description:'Synthetic customer: Checkout timed out; I retried and now see two bank entries. What should I do?',customer:'Guided synthetic demo',priority:'High'});
- console.log('Ticket:',ticket.id,' — '+base+'/#ticket='+ticket.id);await run(ticket.id,'support');await ui.question('\nPress Enter to investigate with the separate engineering identity. ');await run(ticket.id,'engineering');
+ console.log('Ticket:',ticket.id,' — '+base+'/#ticket='+ticket.id);await run(ticket.id,'support');
+ console.log('\nOpen the Triage tab, assess the issue, inspect the evidence and record a human routing decision.');
+ await ui.question('Press Enter after recording the triage route. ');
+ const triage=await api('/tickets/'+ticket.id+'/triage');
+ if(triage.decision?.action!=='engineering-investigation')throw new Error('The reviewed route does not request engineering. Stop here, collect the missing details or handle it in support; do not force an escalation for the demo.');
+ await run(ticket.id,'engineering');
  console.log('\nOpen Review queue, edit and approve the customer-safe proposal.');await ui.question('After approval, press Enter to start a fresh support session. ');
  const d=await api('/tickets/'+ticket.id+'?role=support');if(!d.approved.length)throw new Error('No approved resolution yet. Review it in the UI first.');await run(ticket.id,'support');console.log('\nFinished. Export the support evidence from the ticket header. Slack delivery remains separate and explicit.');
 }finally{ui.close();}
