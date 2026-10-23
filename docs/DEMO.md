@@ -1,23 +1,16 @@
-# Five-minute walkthrough
+# Triage-first walkthrough
 
-Use synthetic data. The local installation is connected to Studio1HQ; a fresh checkout leaves Slack delivery disabled until configured. [Executed Slack evidence](SLACK-E2E.md).
+Use synthetic data. Provider response time varies; these steps are not a latency promise. The current workflow adds internal routing before engineering work. The previous [executed Slack demonstration](SLACK-E2E.md) describes the historical pre-triage flow.
 
-1. **0:00 — Ticket:** open checkout issue RD-1001 (or create a new checkout ticket). Explain support/engineering/reviewer identities.
-2. **0:30 — Triage:** run the support agent. Inspect actual search/read calls and sources. It should avoid inventing a fix when none is approved.
-3. **1:30 — Investigation:** switch to Engineering. Run its agent, inspect the private source and saved investigation. A proposed response appears in Review queue.
-4. **2:30 — Review:** inspect and edit the customer-safe wording. Keep hypotheses and unshipped changes clearly labeled. Confirm the review checkbox and approve. The proposal hash and actual destination are visible.
-5. **3:30 — Fresh session:** switch back to Support and run it again. It receives no engineering transcript. Inspect the call reading `/approved/RD-1001.md` and its source citation.
-6. **4:30 — Evidence:** export the support evidence. Show permitted collections in Knowledge. Open Connections and inspect the installed Slack connection.
+1. Create a ticket or open a synthetic existing one. Read the full customer report in **Triage**. Add non-sensitive expected/actual behavior, impact and reproduction details when available.
+2. Select **Assess this issue**. The agent reads approved and engineering knowledge with read-only tools. Inspect the actual operations; failed searches are visible. No coding work or customer message starts here.
+3. Read the recommendation, exact knowledge excerpts, source type, missing information and unconfirmed hypothesis. An engineering observation does not prove the cause of this report.
+4. Record a human route and reason: collect more information, handle in support, route to operations, or prepare engineering investigation. If more information is needed, add context and run a new assessment. Do not force a code route merely to complete a demo.
+5. For a reviewed engineering route, confirm the destination may receive internal evidence, then **Prepare Devin brief**. Inspect it, copy it or download Markdown. The app does not send it to Devin. Alternatively, open Engineering and explicitly start RelayDesk's existing investigation agent.
+6. If an investigation proposes a customer response, use the separate Review queue. Edit and approve the exact text. A fresh support session can retrieve that approved resolution without receiving private triage or engineering transcripts.
 
-An already approved checkout ticket demonstrates reuse immediately. Create another checkout report to demonstrate a new session finding the previous ticket’s resolution through a broad keyword search. Do not describe a generated response as a real customer message or a shipped production fix.
+## Slack entry point
 
-## Five-minute Slack version
+Mention the installed bot in its dedicated support channel. A support response offers **Request internal triage**. The action queues a read-only assessment and posts its summary only to the configured private engineering destination. Review the full evidence in the local web UI and record the route there. This new Slack path has not yet been exercised against a live workspace; the earlier Slack E2E report is historical.
 
-1. **0:00:** mention RelayDesk in `#relaydesk-demo-support` with a clearly synthetic login or checkout question. Show the bot's source-citing triage in the same thread.
-2. **0:45:** click **Escalate to engineering**. Show the separate private engineering channel and private sources in the local trace.
-3. **1:45:** open **Review resolution** in the private review channel. Select **Request changes** and explain an unsupported claim. Submit; the new proposal is a fresh model session using the feedback.
-4. **2:45:** open the latest revision. Edit customer-safe text, select **Approve edited resolution**, and submit. Show reviewer, revision and hashes in the local Review queue.
-5. **3:45:** return to the original support thread. The fresh support session must read the exact approved revision before delivery. Show its canonical source and zero prior conversation messages.
-6. **4:30:** click an old revision's Review button to show a clear refusal. Open the support-only evidence export and explain the distinction between synthetic operator review and real customer deployment.
-
-For a repeatable replay without new inference, use RD-1005's recorded thread and audit. New mentions and review actions incur actual provider requests; elapsed model latency varies.
+New ticket context or changed knowledge invalidates an older assessment for routing/handoff. A newer failed assessment attempt also prevents an old report from being used as if it were current. No scheduled endurance campaign is started by this walkthrough.

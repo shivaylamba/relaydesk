@@ -4,8 +4,15 @@
 
 A standalone support-to-engineering workspace with real Nebius agents, identity-scoped OpenLore memory, a human review queue, and a Slack interface.
 
+## Triage before escalation
+
+RelayDesk now includes an internal **Triage** workspace inspired by the Lix support handoff: assess whether an issue needs support guidance, more information, an operational action, possible code investigation, or remains undecidable. It shows exact excerpts from knowledge read in the run, source hashes, missing questions, qualitative confidence and a human routing decision.
+
+Triage has read-only tools over approved and private engineering knowledge. It cannot write findings, publish proposals, execute a fix or contact a coding agent. A reviewed engineering route can produce a copyable/downloadable **Devin investigation brief**. **Devin and Intercom connectors are not implemented; no brief is sent automatically.** See [triage workflow, API and migration](docs/TRIAGE.md).
+
 ## The workflow
 
+0. An internal triage assessment and nominated routing decision determine the next step before a new engineering investigation.
 1. A support agent searches approved knowledge and the support playbook.
 2. A separate engineering agent reads private investigations and records findings.
 3. Engineering publishes a customer-safe proposed resolution.
@@ -65,7 +72,7 @@ The connector uses Slack Bolt and Socket Mode and is **disabled by default in a 
 5. Set the workspace ID, three channel IDs, and the comma-separated Slack user IDs authorized to review proposals in `.env`.
 6. Set `SLACK_ENABLED=true`. Once the destination bindings are checked, explicitly set `SLACK_DELIVERY_ENABLED=true`. Restart RelayDesk.
 7. In the configured support channel, mention `@RelayDesk` with a synthetic issue. Mention it in the same thread for a follow-up. Replies stay in that thread. Direct messages and unmentioned messages are outside this MVP’s subscriptions.
-8. Use **Escalate to engineering**. Investigation output stays in the private engineering channel. Customer-safe proposals appear in the private review channel.
+8. Use **Request internal triage**. The assessment stays in the private engineering channel; review the evidence and record the route in RelayDesk before starting an investigation. Older escalation buttons now request triage as well. Coding investigations and customer-safe resolution review remain separate steps.
 9. A nominated reviewer selects **Review resolution** and can approve edited text, request changes, or reject. A changes request starts a fresh engineering revision with the reviewer feedback. Approval starts a fresh support run; its actual tool trace must show the exact approved document revision before a reply is sent to the original support thread.
 
 The connector checks `auth.test`, verifies the workspace ID and bot channel membership, requires private engineering/review channels, and rejects Slack Connect destinations. Roles come from fixed server-side bindings, never from message text. The app never forwards engineering threads into support prompts. Slack reviewers are checked against the configured allowlist and review modal sessions are bound to the user/workspace/source hash.
